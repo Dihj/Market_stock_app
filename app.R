@@ -10,8 +10,9 @@ library(DT)
 library(shinyWidgets)
 
 # Define data
-index_data2 <- read.csv("remain_items.csv", stringsAsFactors = FALSE)
-index_data <- index_data2 %>%
+index_data <- read.csv("remain_items.csv", stringsAsFactors = FALSE)
+index_data <- index_data[order(index_data$Ref), ]
+index_data <- index_data %>%
   filter(Stock != 0)
 
 # Define UI for application
