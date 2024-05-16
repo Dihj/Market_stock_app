@@ -62,7 +62,7 @@ ui <- dashboardPage(
             solidHeader = TRUE,
             status = "primary",
             collapsible = TRUE,
-            useShinyalert(),  # Set up shinyalert
+         #   useShinyalert(),  # Set up shinyalert
             fluidRow(
               column(9, DTOutput("data_table")),
               column(3, actionButton("removeButton", "Remove Selected Row"))
@@ -109,7 +109,10 @@ ui <- dashboardPage(
 
 # Define server logic
 server <- function(input, output, session) {
-  
+  index_data <- read.csv("remain_items.csv", stringsAsFactors = FALSE)
+  index_data <- index_data[order(index_data$Ref), ]
+  index_data <- index_data %>%
+    filter(Stock != 0)
   # Update the command index dropdown menu with the choices
   updateSelectInput(session, "command_index", choices = unique(index_data$Ref))
   
@@ -136,6 +139,7 @@ server <- function(input, output, session) {
   
   # Initialize reactiveValues to store the data
   data <- reactiveValues(df = NULL, stock = NULL)
+  data$stock <- read.csv('remain_items.csv')
   excel_data <- reactiveValues(dely = NULL)
   
   # Load existing data from Excel file if it exists, otherwise create an empty dataframe
@@ -207,7 +211,7 @@ server <- function(input, output, session) {
         color <- latest_delivery[i, "Color"]
         
         if (index %in% index_data$Ref & size %in% index_data$Size & color %in% index_data$Color) {
-          stock_index <- which(stock$Index == index & stock$Size == size & stock$Color == color)
+          stock_index <- which(stock$Ref == index & stock$Size == size & stock$Color == color)
           stock$Stock[stock_index] <- stock$Stock[stock_index] - 1
         }
       }
@@ -230,6 +234,7 @@ server <- function(input, output, session) {
     updateNumericInput(session, "total_price", value = NULL)
     
     excel_data$dely <- read_excel('all_deliveries.xlsx')
+    data$stock <- read.csv('remain_items.csv')
   })
   
   # Try to do this to update delivary data
@@ -264,102 +269,6 @@ server <- function(input, output, session) {
     }
   })
   
-  # Update available stock
-  observeEvent(data$df, {
-    if (!is.null(data$df)) {
-      stock <- data.frame(Index = index_data$Ref,
-                          Description = index_data$Description,
-                          Size = index_data$Size,
-                          Color = index_data$Color,
-                          Price = index_data$Price,
-                          Stock = index_data$Stock)
-      
-      for (i in 1:nrow(data$df)) {
-        index <- data$df[i, "Ref"]
-        size <- data$df[i, "Size"]
-        color <- data$df[i, "Color"]
-        
-        if (index %in% index_data$Ref & size %in% index_data$Size & color %in% index_data$Color) {
-          stock_index <- which(stock$Index == index & stock$Size == size & stock$Color == color)
-          stock$Stock[stock_index] <- stock$Stock[stock_index] - 1
-        }
-      }
-      
-      data$stock <- stock
-    }
-  })
-  
-  # Update delivery data
-#  observeEvent(excel_data$dely, {
-#    excel_data$dely <- read_excel('all_deliveries_test.xlsx')
-#  })
-  
-  observe({
-    output$data_table <- renderDT({
-      datatable(tail(excel_data$dely, dim(excel_data$dely)[1]), escape = FALSE, options = list(pageLength = 10), selection = 'single')
-    })
-  })
-  ### This is for plot Stock
-    observe({
-    # Display the stock table
-    output$stock_table <- renderTable({
-      if (!is.null(data$stock)) {
-        filtered_stock <- data$stock
-        if (!is.null(input$filter_index)) {
-          filtered_stock <- filtered_stock[filtered_stock$Index == input$filter_index, ]
-        }
-        filtered_stock
-      }
-    })
-    
-    # Plot available stock
-    output$stock_plot <- renderPlotly({
-      
-     if (!is.null(data$stock)) {
-       ggplotly(
-          ggplot(data$stock, aes(x = Index, y = Stock)) +
-            geom_bar(stat = "identity", fill = "blue") +
-            labs(title = "Available Stock", x = "Index", y = "Available Stock") +
-            theme_minimal()
-        )
-      }
-    })
-  # PLot stock table for each index items
-    output$stock_plot_table <- renderPlotly({
-      if (!is.null(data$stock)) {
-        #        if (!is.null(data$stock)) {
-        filtered_stock <- data$stock
-        if (!is.null(input$filter_index)) {
-          filtered_stock <- filtered_stock[filtered_stock$Index == input$filter_index, ]
-        }
-        filtered_stock
-        
-        ggplotly(
-          ggplot(filtered_stock, aes(x = Size, y = Color, color = as.factor(Stock), size = Stock)) + 
-            geom_point(alpha = 0.7) +
-            scale_color_manual(values = c("blue", "green", "red", "purple", "orange", "cyan", "magenta"), name = "Stock") +
-            labs(title = "Stock Distribution by Size and Color", x = "Size", y = "Color", color = "Stock") +
-            theme_minimal()
-          
-        )
-      }
-    
-    })
-    # Display detailed stock information
-    output$stock_detail <- renderText({
-      if (!is.null(input$command_index) && !is.null(data$stock)) {
-        selected_index <- input$command_index
-        stock_info <- data$stock %>%
-          filter(Index == selected_index)
-        paste("Description:", stock_info$Description, "\n",
-              "Size:", stock_info$Size, "\n",
-              "Color:", stock_info$Color, "\n",
-              "Available Stock:", stock_info$Stock)
-      }
-    })
-  
-    
-  })
   
   
   # This is to remove selected row
@@ -369,7 +278,7 @@ server <- function(input, output, session) {
         session = session,
         inputId = "remove_row",
         title = "Confirmation",
-        text = "Are you sure you want to remove the selected row?",
+        text = "Are you sure you want to remove the selected delivery?",
         type = "warning",
         showCancelButton = TRUE,
         confirmButtonColor = "#DD6B55",
@@ -439,6 +348,11 @@ server <- function(input, output, session) {
       updated_remain_items <- aggregate(Stock ~ ., updated_remain_items, sum)
       write.csv(updated_remain_items, "remain_items.csv", row.names = FALSE)
       excel_data$dely <- read_excel('all_deliveries.xlsx')
+      index_data <- read.csv("remain_items.csv", stringsAsFactors = FALSE)
+      index_data <- index_data[order(index_data$Ref), ]
+      index_data <- index_data %>%
+        filter(Stock != 0)
+      data$stock <- read.csv('remain_items.csv')
     } else {
       # Show cancel message
       confirmSweetAlert(
@@ -451,7 +365,104 @@ server <- function(input, output, session) {
       )
     }
   })
+
+
+  # Update available stock
+  observeEvent(data$df, {
+    if (!is.null(data$df)) {
+      stock <- data.frame(Ref = index_data$Ref,
+                          Description = index_data$Description,
+                          Size = index_data$Size,
+                          Color = index_data$Color,
+                          Price = index_data$Price,
+                          Stock = index_data$Stock)
+      
+      for (i in 1:nrow(data$df)) {
+        index <- data$df[i, "Ref"]
+        size <- data$df[i, "Size"]
+        color <- data$df[i, "Color"]
+        
+        if (index %in% index_data$Ref & size %in% index_data$Size & color %in% index_data$Color) {
+          stock_index <- which(stock$Ref == index & stock$Size == size & stock$Color == color)
+          stock$Stock[stock_index] <- stock$Stock[stock_index] - 1
+        }
+      }
+      
+      data$stock <- stock
+    }
+  })
   
+  # Update delivery data
+#  observeEvent(excel_data$dely, {
+#    excel_data$dely <- read_excel('all_deliveries_test.xlsx')
+#  })
+  
+  observe({
+    output$data_table <- renderDT({
+      datatable(tail(excel_data$dely, dim(excel_data$dely)[1]), escape = FALSE, options = list(pageLength = 10), selection = 'single')
+    })
+  })
+  ### This is for plot Stock
+    observe({
+    # Display the stock table
+    output$stock_table <- renderTable({
+      if (!is.null(data$stock)) {
+        filtered_stock <- data$stock
+        if (!is.null(input$filter_index)) {
+          filtered_stock <- filtered_stock[filtered_stock$Ref == input$filter_index, ]
+        }
+        filtered_stock
+      }
+    })
+    
+    # Plot available stock
+    output$stock_plot <- renderPlotly({
+      
+     if (!is.null(data$stock)) {
+       ggplotly(
+          ggplot(data$stock, aes(x = Ref, y = Stock)) +
+            geom_bar(stat = "identity", fill = "blue") +
+            labs(title = "Available Stock", x = "Index", y = "Available Stock") +
+            theme_minimal()
+        )
+      }
+    })
+  # PLot stock table for each index items
+    output$stock_plot_table <- renderPlotly({
+      if (!is.null(data$stock)) {
+        #        if (!is.null(data$stock)) {
+        filtered_stock <- data$stock
+        if (!is.null(input$filter_index)) {
+          filtered_stock <- filtered_stock[filtered_stock$Ref == input$filter_index, ]
+        }
+        filtered_stock
+        
+        ggplotly(
+          ggplot(filtered_stock, aes(x = Size, y = Color, color = as.factor(Stock), size = Stock)) + 
+            geom_point(alpha = 0.7) +
+            scale_color_manual(values = c("blue", "green", "red", "purple", "orange", "cyan", "magenta"), name = "Stock") +
+            labs(title = "Stock Distribution by Size and Color", x = "Size", y = "Color", color = "Stock") +
+            theme_minimal()
+          
+        )
+      }
+    
+    })
+    # Display detailed stock information
+    output$stock_detail <- renderText({
+      if (!is.null(input$command_index) && !is.null(data$stock)) {
+        selected_index <- input$command_index
+        stock_info <- data$stock %>%
+          filter(Ref == selected_index)
+        paste("Description:", stock_info$Description, "\n",
+              "Size:", stock_info$Size, "\n",
+              "Color:", stock_info$Color, "\n",
+              "Available Stock:", stock_info$Stock)
+      }
+    })
+  
+    
+  })
   
   
 }
